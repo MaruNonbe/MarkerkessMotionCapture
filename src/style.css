@@ -160,6 +160,9 @@ html, body {
   color: var(--text-dim);
   line-height: 1.5;
 }
+.field .btn.full + .hint + .btn.full {
+  margin-top: 4px;
+}
 
 .status {
   font-size: 13px;
