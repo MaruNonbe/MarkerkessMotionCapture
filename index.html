@@ -1,89 +1,73 @@
-import "./style.css";
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
-import { Pose, Face, Hand } from "kalidokit";
-// Holistic は index.html の <script> タグ経由でグローバルに読み込まれる (npm/ESM非対応のため)
-const { Holistic } = window;
-import { rigPose, rigFace, rigHand } from "./vrmRig.js";
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video to VRM Motion</title>
+    <!-- @mediapipe/holistic は npm/ESM 形式で配布されていないため CDN から読み込む -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js" crossorigin="anonymous"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1>Video → VRM Motion</h1>
+        <p class="subtitle">動画に映る人物の動きを3Dキャラクター(VRM)にリアルタイム反映</p>
+      </header>
 
-// ---------- DOM ----------
-const videoEl = document.getElementById("input-video");
-const threeCanvas = document.getElementById("three-canvas");
-const landmarkCanvas = document.getElementById("landmark-canvas");
-const landmarkCtx = landmarkCanvas.getContext("2d");
-const statusEl = document.getElementById("status");
-const btnWebcam = document.getElementById("btn-webcam");
-const btnPlay = document.getElementById("btn-play");
-const btnPause = document.getElementById("btn-pause");
-const inputFile = document.getElementById("input-file");
-const inputVrm = document.getElementById("input-vrm");
-const toggleLandmarks = document.getElementById("toggle-landmarks");
+      <main class="layout">
+        <section class="stage">
+          <div class="canvas-wrap">
+            <canvas id="three-canvas"></canvas>
+            <video id="input-video" playsinline style="display:none"></video>
+          </div>
+          <div class="preview-wrap">
+            <canvas id="landmark-canvas"></canvas>
+          </div>
+        </section>
 
-function setStatus(text, kind = "") {
-  statusEl.textContent = text;
-  statusEl.className = "status" + (kind ? ` ${kind}` : "");
-}
+        <aside class="panel">
+          <div class="field">
+            <label>入力ソース</label>
+            <div class="btn-row">
+              <button id="btn-webcam" class="btn">Webカメラ</button>
+              <label class="btn file-btn">
+                動画ファイル
+                <input id="input-file" type="file" accept="video/*" hidden />
+              </label>
+            </div>
+          </div>
 
-// ---------- Three.js シーン ----------
-const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, alpha: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+          <div class="field">
+            <label>VRMモデル</label>
+            <label class="btn file-btn full">
+              .vrmファイルを読み込む
+              <input id="input-vrm" type="file" accept=".vrm" hidden />
+            </label>
+            <p class="hint">未指定の場合はサンプルの棒人間アバターで動作確認できます。</p>
+          </div>
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
-camera.position.set(0, 1.3, 3.2);
-camera.lookAt(0, 1.1, 0);
+          <div class="field">
+            <label>再生コントロール</label>
+            <div class="btn-row">
+              <button id="btn-play" class="btn" disabled>再生</button>
+              <button id="btn-pause" class="btn" disabled>一時停止</button>
+            </div>
+          </div>
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.2));
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-dirLight.position.set(1, 2, 1);
-scene.add(dirLight);
+          <div class="field status-field">
+            <label>ステータス</label>
+            <div id="status" class="status">待機中</div>
+          </div>
 
-const grid = new THREE.GridHelper(4, 16, 0x2a323d, 0x1a2029);
-scene.add(grid);
-
-function resizeRenderer() {
-  const wrap = threeCanvas.parentElement;
-  const w = wrap.clientWidth;
-  const h = wrap.clientHeight;
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-
-  landmarkCanvas.width = landmarkCanvas.clientWidth;
-  landmarkCanvas.height = landmarkCanvas.clientHeight;
-}
-window.addEventListener("resize", resizeRenderer);
-resizeRenderer();
-
-let currentVrm = null;
-
-function loadVrm(url) {
-  const loader = new GLTFLoader();
-  loader.register((parser) => new VRMLoaderPlugin(parser));
-  setStatus("VRMモデルを読み込み中…");
-
-  loader.load(
-    url,
-    (gltf) => {
-      const vrm = gltf.userData.vrm;
-      if (currentVrm) {
-        scene.remove(currentVrm.scene);
-        VRMUtils.deepDispose(currentVrm.scene);
-      }
-      VRMUtils.rotateVRM0(vrm); // VRM0系モデルの向きを補正
-      scene.add(vrm.scene);
-      currentVrm = vrm;
-      setStatus("VRM読み込み完了。入力ソースを選択してください。");
-    },
-    undefined,
-    (err) => {
-      console.error(err);
-      setStatus("VRMの読み込みに失敗しました。", "error");
-    }
-  );
-}
-
-// ---------- MediaPipe Holistic ----------
-const holistic = new Holistic({
-  locateFile: (file) => `https://cdn
+          <div class="field">
+            <label class="checkbox-label">
+              <input id="toggle-landmarks" type="checkbox" checked />
+              骨格プレビューを表示
+            </label>
+          </div>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
