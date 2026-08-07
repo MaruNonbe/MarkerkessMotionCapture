@@ -5,7 +5,8 @@ import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { Pose, Face, Hand } from "kalidokit";
 // Holistic は index.html の <script> タグ経由でグローバルに読み込まれる (npm/ESM非対応のため)
 const { Holistic } = window;
-import { rigPose, rigFace, rigHand } from "./vrmRig.js";
+import { rigPose, rigFace, rigHand, getHipsBone } from "./vrmRig.js";
+import { snapshotPose, buildBvh } from "./bvhExport.js";
 
 // ---------- DOM ----------
 const videoEl = document.getElementById("input-video");
@@ -19,6 +20,7 @@ const btnPause = document.getElementById("btn-pause");
 const inputFile = document.getElementById("input-file");
 const inputVrm = document.getElementById("input-vrm");
 const toggleLandmarks = document.getElementById("toggle-landmarks");
+const btnRecord = document.getElementById("btn-record");
 
 function setStatus(text, kind = "") {
   statusEl.textContent = text;
@@ -282,10 +284,81 @@ btnPause.addEventListener("click", () => {
   stopTracking();
 });
 
+// ---------- 録画 (BVH書き出し) ----------
+const RECORD_FPS = 30;
+const RECORD_INTERVAL_MS = 1000 / RECORD_FPS;
+let recording = false;
+let recordedFrames = [];
+let recordAccumulatorMs = 0;
+let lastRecordTick = 0;
+
+function startRecording() {
+  if (!currentVrm) {
+    setStatus("先にVRMモデルを読み込んでください。", "error");
+    return;
+  }
+  recordedFrames = [];
+  recordAccumulatorMs = 0;
+  lastRecordTick = performance.now();
+  recording = true;
+  btnRecord.textContent = "録画終了して保存";
+  btnRecord.classList.add("active");
+}
+
+function stopRecording() {
+  recording = false;
+  btnRecord.textContent = "録画開始";
+  btnRecord.classList.remove("active");
+
+  if (!currentVrm || recordedFrames.length === 0) {
+    setStatus("録画データがありませんでした。", "error");
+    return;
+  }
+
+  const hips = getHipsBone(currentVrm);
+  if (!hips) {
+    setStatus("Hipsボーンが見つからず、BVHを書き出せませんでした。", "error");
+    return;
+  }
+
+  const bvhText = buildBvh(hips, recordedFrames, (1 / RECORD_FPS).toFixed(6));
+  const blob = new Blob([bvhText], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `motion-${Date.now()}.bvh`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  setStatus(`BVHを書き出しました(${recordedFrames.length}フレーム)。`);
+}
+
+btnRecord.addEventListener("click", () => {
+  if (recording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
 // ---------- レンダーループ ----------
 function animate() {
   requestAnimationFrame(animate);
   if (currentVrm) currentVrm.update(1 / 60);
+
+  if (recording && currentVrm) {
+    const now = performance.now();
+    recordAccumulatorMs += now - lastRecordTick;
+    lastRecordTick = now;
+    while (recordAccumulatorMs >= RECORD_INTERVAL_MS) {
+      const hips = getHipsBone(currentVrm);
+      if (hips) recordedFrames.push(snapshotPose(hips));
+      recordAccumulatorMs -= RECORD_INTERVAL_MS;
+    }
+  }
+
   renderer.render(scene, camera);
 }
 animate();
