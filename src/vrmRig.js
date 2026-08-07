@@ -12,6 +12,9 @@ function lerpEuler(bone, x, y, z, factor = 0.4) {
 function getBone(vrm, name) {
   return vrm.humanoid?.getNormalizedBoneNode(name) ?? null;
 }
+export function getHipsBone(vrm) {
+  return getBone(vrm, VRMHumanBoneName.Hips);
+}
 
 /**
  * Kalidokit の Pose.solve() 結果を VRM の腕・脚・胴体ボーンへ反映する
