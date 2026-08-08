@@ -12,9 +12,17 @@ function lerpEuler(bone, x, y, z, factor = 0.4) {
 function getBone(vrm, name) {
   return vrm.humanoid?.getNormalizedBoneNode(name) ?? null;
 }
+
+/**
+ * Hipsボーン (BVH/GLB書き出しの起点) を取得する。
+ * 描画・スキニングに実際使われる「Raw」ボーンを使う必要がある
+ * (Normalizedボーンは別系統の補助的な階層で、THREE.Boneではないため
+ *  子ボーンの走査やエクスポートには使えない)。
+ */
 export function getHipsBone(vrm) {
-  return getBone(vrm, VRMHumanBoneName.Hips);
+  return vrm.humanoid?.getRawBoneNode(VRMHumanBoneName.Hips) ?? null;
 }
+
 
 /**
  * Kalidokit の Pose.solve() 結果を VRM の腕・脚・胴体ボーンへ反映する
