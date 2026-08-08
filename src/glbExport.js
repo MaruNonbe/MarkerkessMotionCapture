@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three"; 
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 
 // VRMのボーンはTHREE.Bone (skin対象) として生成されるため、
