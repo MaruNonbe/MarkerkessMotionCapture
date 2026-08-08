@@ -7,6 +7,7 @@ import { Pose, Face, Hand } from "kalidokit";
 const { Holistic } = window;
 import { rigPose, rigFace, rigHand, getHipsBone } from "./vrmRig.js";
 import { snapshotPose, buildBvh } from "./bvhExport.js";
+import { buildAnimationClip, exportAnimatedGlb } from "./glbExport.js";
 
 // ---------- DOM ----------
 const videoEl = document.getElementById("input-video");
@@ -21,6 +22,7 @@ const inputFile = document.getElementById("input-file");
 const inputVrm = document.getElementById("input-vrm");
 const toggleLandmarks = document.getElementById("toggle-landmarks");
 const btnRecord = document.getElementById("btn-record");
+const btnExportGlb = document.getElementById("btn-export-glb");
 
 function setStatus(text, kind = "") {
   statusEl.textContent = text;
@@ -332,8 +334,41 @@ function stopRecording() {
   a.remove();
   URL.revokeObjectURL(url);
 
-  setStatus(`BVHを書き出しました(${recordedFrames.length}フレーム)。`);
+  btnExportGlb.disabled = false;
+  setStatus(`BVHを書き出しました(${recordedFrames.length}フレーム)。GLBも書き出せます。`);
 }
+
+async function exportGlb() {
+  if (!currentVrm || recordedFrames.length === 0) {
+    setStatus("先に録画してください。", "error");
+    return;
+  }
+  const hips = getHipsBone(currentVrm);
+  if (!hips) {
+    setStatus("Hipsボーンが見つかりませんでした。", "error");
+    return;
+  }
+  setStatus("GLBを書き出し中…");
+  try {
+    const clip = buildAnimationClip(hips, recordedFrames, RECORD_FPS);
+    const glbBuffer = await exportAnimatedGlb(currentVrm.scene, clip);
+    const blob = new Blob([glbBuffer], { type: "model/gltf-binary" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `motion-${Date.now()}.glb`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus("GLBを書き出しました。");
+  } catch (err) {
+    console.error(err);
+    setStatus("GLBの書き出しに失敗しました。", "error");
+  }
+}
+
+btnExportGlb.addEventListener("click", exportGlb);
 
 btnRecord.addEventListener("click", () => {
   if (recording) {
