@@ -1,4 +1,4 @@
-import * as THREE from "three"; 
+import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 
 // VRMのボーンはTHREE.Bone (skin対象) として生成されるため、
@@ -50,15 +50,60 @@ export function buildAnimationClip(hipsBone, frames, fps) {
 }
 
 /**
+ * VRMのMToonマテリアルはGLTFExporterが正しく書き出せないため、
+ * 書き出し直前だけ標準的なマテリアル(色・テクスチャを引き継いだもの)に一時的に差し替える。
+ * 書き出し後は元のMToonマテリアルに戻すので、画面上の見た目には影響しない。
+ */
+function swapToExportableMaterials(root) {
+  const restoreList = [];
+
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const converted = materials.map((mat) => {
+      if (!mat) return mat;
+      const standard = new THREE.MeshStandardMaterial({
+        map: mat.map || null,
+        color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
+        transparent: !!mat.transparent,
+        alphaTest: mat.alphaTest || 0,
+        side: mat.side !== undefined ? mat.side : THREE.FrontSide,
+        skinning: true,
+      });
+      // 発光テクスチャ(目や光る部分など)があれば引き継ぐ
+      if (mat.emissiveMap) standard.emissiveMap = mat.emissiveMap;
+      if (mat.emissive) standard.emissive = mat.emissive.clone();
+      return standard;
+    });
+
+    restoreList.push({ obj, original: obj.material });
+    obj.material = Array.isArray(obj.material) ? converted : converted[0];
+  });
+
+  return () => {
+    for (const { obj, original } of restoreList) {
+      obj.material = original;
+    }
+  };
+}
+
+/**
  * VRMのシーンとAnimationClipから、アニメーション付きのバイナリGLB (ArrayBuffer) を書き出す
  */
 export function exportAnimatedGlb(vrmScene, clip) {
   const exporter = new GLTFExporter();
+  const restoreMaterials = swapToExportableMaterials(vrmScene);
   return new Promise((resolve, reject) => {
     exporter.parse(
       vrmScene,
-      (result) => resolve(result),
-      (err) => reject(err),
+      (result) => {
+        restoreMaterials();
+        resolve(result);
+      },
+      (err) => {
+        restoreMaterials();
+        reject(err);
+      },
       { binary: true, animations: [clip] }
     );
   });
